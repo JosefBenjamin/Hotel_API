@@ -1,0 +1,32 @@
+package app;
+
+import app.config.ApplicationConfig;
+import app.config.HibernateConfig;
+import app.dao.HotelDAO;
+import app.dao.IDAO;
+import app.entities.Hotel;
+import app.entities.Room;
+import app.populators.HotelPopulator;
+import app.populators.RoomPopulator;
+import jakarta.persistence.EntityManagerFactory;
+
+import java.util.List;
+
+public class Main {
+
+
+    public static void main(String[] args) {
+        EntityManagerFactory emf = HibernateConfig.getEntityManagerFactory();
+        IDAO dao = HotelDAO.getInstance(emf);
+
+
+        //TODO: Populate DB with initial data
+        List<Hotel> hotels = HotelPopulator.populateHotels(dao);
+        RoomPopulator.populateRooms(dao, hotels);
+
+        ApplicationConfig.startServer(7070);
+
+    }
+
+
+}
