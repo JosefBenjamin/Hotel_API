@@ -12,8 +12,9 @@ import java.util.Set;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-@ToString
 @Builder
+@ToString(exclude = {"allRooms"})
+@EqualsAndHashCode(exclude = {"allRooms"})
 public class Hotel {
 
     @Id

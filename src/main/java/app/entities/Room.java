@@ -11,7 +11,8 @@ import java.util.Set;
 @Entity
 @Getter
 @Setter
-@ToString
+@ToString(exclude = {"hotel"})
+@EqualsAndHashCode(exclude = {"hotel"})
 @AllArgsConstructor
 @NoArgsConstructor
 public class Room {
