@@ -13,6 +13,8 @@ public interface IDAO {
 
     Hotel createHotel(Hotel hotel);
 
+    List<Hotel> createHotels(List<Hotel> hotels);
+
     Hotel updateHotel(Hotel hotel);
 
     boolean deleteHotel(Hotel hotel);

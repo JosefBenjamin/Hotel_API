@@ -4,6 +4,9 @@ import app.dto.HotelDTO;
 import app.dto.RoomDTO;
 import app.entities.Hotel;
 import app.entities.Room;
+
+import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class DTOConverter {
@@ -25,6 +28,23 @@ public class DTOConverter {
                 room.getHotel().getId(),
                 room.getRoomNumber(),
                 room.getPrice());
+    }
+
+    public HotelDTO[] fromHotelList(List<Hotel> hotels) {
+        HotelDTO[] convertedHotels = hotels.stream()
+                .map((h) ->  fromHotel(h))
+                //(int n) -> new HotelDTO[n]
+                .toArray(HotelDTO[]::new);
+
+        return convertedHotels;
+    }
+
+    public RoomDTO[] fromRoomList(List<Room> rooms) {
+        RoomDTO[] roomDTOS = rooms.stream().map((r) -> fromRoom(r))
+                //(int n) -> new RoomDTO[n]
+                .toArray(RoomDTO[]::new);
+
+        return roomDTOS;
     }
 
 

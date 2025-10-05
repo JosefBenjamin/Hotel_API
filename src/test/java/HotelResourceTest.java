@@ -1,175 +1,248 @@
-
 import app.config.ApplicationConfig;
 import app.config.HibernateConfig;
+import app.dao.HotelDAO;
+import app.dao.IDAO;
+import app.dto.HotelDTO;
+import app.dto.RoomDTO;
+import app.entities.Hotel;
+import app.entities.Room;
+import app.populators.HotelPopulator;
+import app.populators.RoomPopulator;
 import io.javalin.Javalin;
 import io.restassured.RestAssured;
-import io.restassured.http.ContentType;
-import io.restassured.response.Response;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 import org.junit.jupiter.api.*;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Socket;
+
+import java.util.List;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@TestInstance(TestInstance.Lifecycle.PER_CLASS) // allow @BeforeAll non-static and instance fields
+//TODO: Default for jUnit is PER_METHOD.
+// Meaning JUnit makes an instance of this class is created for each @Test that is run
 public class HotelResourceTest {
 
-    private static final String BASE_URL = "http://localhost:7070/api/v1";
-    private Integer createdHotelId;
-    private Integer createdRoomId;
-    private Javalin app; // only non-null if we start the server here
+    //TODO: Dependencies
+    private static Javalin app; // only non-null if we start the server here
+    private  static EntityManagerFactory emf;
+    private static IDAO dao;
 
     @BeforeAll
-    void bootServerAndRestAssured() throws InterruptedException {
-        RestAssured.baseURI = BASE_URL;
+    static void init()  {
+        // 1) Lock test mode BEFORE starting server or creating EMF
+        HibernateConfig.setTest(true);
+
+        // 2) Start server (this should read the same test config)
+        app = ApplicationConfig.startServer(7070);
+
+        // 3) Point test EMF/DAO at the same test DB
+        emf = HibernateConfig.getEntityManagerFactoryForTest();
+        dao = HotelDAO.getInstance(emf);
+
+        // 4) Rest Assured base URL/URI
+        RestAssured.baseURI = "http://localhost:7070";
+        RestAssured.basePath = "/api/v1";
         RestAssured.enableLoggingOfRequestAndResponseIfValidationFails(); // auto-log failures
-        HibernateConfig.setTest(true); // Use Testcontainers DB + create-drop
-
-        // If port 7070 isn't listening, start Javalin (same as your Main)
-        if (!isPortOpen("localhost", 7070)) {
-            app = ApplicationConfig.startServer(7070);
-            waitUntilHealthy(); // ping until GET /hotel is 200
-        }
-
-        Assertions.assertTrue(isPortOpen("localhost", 7070),
-                "Server is not listening on http://localhost:7070");
     }
 
-    private boolean isPortOpen(String host, int port) {
-        try (Socket s = new Socket()) {
-            s.connect(new InetSocketAddress(host, port), 300);
-            return true;
-        } catch (IOException e) {
-            return false;
+    @BeforeEach
+    void setUp(){
+        try(EntityManager em = emf.createEntityManager()) {
+            em.getTransaction().begin();
+            /* TODO: Deletes all rows from both tables.
+                Resets their primary key sequences back to 1.
+                 Cascades the operation to any dependent tables
+             */
+            em.createNativeQuery("TRUNCATE TABLE room, hotel " +
+                    "RESTART IDENTITY CASCADE").executeUpdate();
+            em.getTransaction().commit();
         }
-    }
 
-    // Poll the API until routes are ready (avoids flaky sleeps)
-    private void waitUntilHealthy() throws InterruptedException {
-        for (int i = 0; i < 30; i++) { // ~6 seconds total
-            try {
-                given().accept(ContentType.JSON)
-                        .when().get("/hotel")
-                        .then().statusCode(200);
-                return; // healthy
-            } catch (AssertionError | Exception ignored) {
-                Thread.sleep(200);
-            }
-        }
-        Assertions.fail("Server never became healthy at " + BASE_URL);
+        // TODO: Seed Hotels and Rooms
+        List<Hotel> hotels = HotelPopulator.populateHotels(dao);
+        List<Room> rooms = RoomPopulator.populateRooms(dao, hotels);
+
     }
 
     @AfterAll
-    void stopServerIfWeStartedIt() {
-        if (app != null) ApplicationConfig.stopServer(app);
+    static void closeDown() {
+        if (app != null) {
+            ApplicationConfig.stopServer(app);
+        }
     }
 
-    @Test @Order(1)
-    @DisplayName("Server up: GET /hotel returns 200")
-    void serverIsUp() {
-        given().accept(ContentType.JSON)
-                .when().get("/hotel")
-                .then().statusCode(200);
-    }
-
-    @Test @Order(2)
-    @DisplayName("Create hotel: POST /hotel -> 201 and id")
-    void createHotel() {
-        String body = "{" +
-                "\"name\":\"Test Hotel\"," +
-                "\"address\":\"Some Street 1\"" +
-                "}";
-
-        Response res = given()
-                .contentType(ContentType.JSON).accept(ContentType.JSON).body(body)
+    @Test
+    public void testGetRequest() {
+        given()
                 .when()
+                .get("/hotel")
+                .then()
+                .statusCode(200);
+    }
+
+    @Test
+    void testGetHotelById() {
+                given()
+                        .pathParams("id", 1)
+                .when()
+                        .get("/hotel/{id}")
+                .then()
+                        .statusCode(200)
+                        .body("id", equalTo(1))
+                        .body("name", equalTo("Hilton"))
+                        .body("rooms.size()", equalTo(3));
+    }
+
+    @Test
+    void testGetHotels() {
+        HotelDTO[] hotelsDTOs =
+                given()
+                .when()
+                        .get("/hotel")
+                .then()
+                        .log().all()
+                        .statusCode(200)
+                        .extract()
+                        .as(HotelDTO[].class);
+
+        assertThat("Expected at least one hotel", hotelsDTOs.length, greaterThanOrEqualTo(3));
+    }
+
+
+    // TODO: ### Get rooms for a hotel
+    //  GET {{url}}/hotel/1/rooms
+    //  Accept: application/json
+    @Test
+    public void testGetRoomsForAHotel() {
+        RoomDTO[] roomDTOS =
+                given()
+                .when()
+                    .get("/hotel/{id}/rooms", 2)
+                .then()
+                        // .log().all()
+                        .statusCode(200)
+                        .extract()
+                        .as(RoomDTO[].class);
+
+        assertThat("Expected at least three rooms", roomDTOS.length, greaterThanOrEqualTo(3));
+    }
+
+    //TODO: ### Create a hotel (valid) — body matches HotelDTO fields
+    // POST {{url}}/hotel
+    @Test
+    public void testCreateHotel_valid(){
+            given()
+                .contentType("application/json")
+                .accept("application/json")
+                .body("{\"name\": \"Newly Created Hotel\",  \"address\": \"The New World\" }")
+            .when()
+                    .post("/hotel")
+            .then()
+                    .statusCode(anyOf(is(200), is(201), is(202)));
+
+            given()
+            .when()
+                    .get("/hotel")
+            .then()
+                    .statusCode(200)
+                    .body("size()", equalTo(6));
+
+    }
+
+
+    //TODO: ### Create a hotel (empty body -> expect 400)
+    // POST {{url}}/hotel
+    // Content-Type: application/json
+    // Accept: application/json
+    @Test
+    public void createHotelEmpty_return400(){
+        given()
+                .contentType("application/json")
+                .accept("application/json")
+                .body("")
+        .when()
                 .post("/hotel")
-                .then()
-                .statusCode(anyOf(is(201), is(200)))
-                .body("id", notNullValue())
-                .body("name", equalTo("Test Hotel"))
-                .extract().response();
+        .then()
+                .statusCode(400);
 
-        createdHotelId = res.path("id");
-        Assertions.assertNotNull(createdHotelId, "Expected server to return a DB id");
     }
 
-    @Test @Order(3)
-    @DisplayName("Get by id: GET /hotel/{id} -> 200 & fields")
-    void getHotelById() {
-        Assumptions.assumeTrue(createdHotelId != null, "No hotel id from create step");
-        given().accept(ContentType.JSON)
-                .when().get("/hotel/{id}", createdHotelId)
-                .then().statusCode(200)
-                .body("id", equalTo(createdHotelId))
-                .body("name", equalTo("Test Hotel"))
-                .body("address", equalTo("Some Street 1"));
+
+    //TODO: ### Update a hotel (valid) — only mutable fields (name, address)
+    // PUT {{url}}/hotel/1
+    // Content-Type: application/json
+    // Accept: application/json
+    @Test
+    public void updateHotel_valid(){
+        given()
+                .contentType("application/json")
+                .accept("application/json")
+                .body("{\"name\": \"The Updated Hotel\", \"address\": \"Milky Way, door to the left\" }")
+        .when()
+                .put("hotel/{id}", 1)
+        .then()
+                .statusCode(200)
+                .body("id", equalTo(1))
+                .body("name", equalTo("The Updated Hotel"))
+                .body("address", equalToIgnoringCase("milky way, door to the left"))
+                .body("rooms.size()", equalTo(3));
+
     }
 
-    @Test @Order(4)
-    @DisplayName("Add room: POST /hotel/{id}/rooms -> 200/201")
-    void addRoomToHotel() {
-        Assumptions.assumeTrue(createdHotelId != null, "No hotel id from create step");
-        String body = "{" +
-                "\"number\":103," +
-                "\"price\":149.0" +
-                "}";
-        Response res = given()
-                .contentType(ContentType.JSON).accept(ContentType.JSON).body(body)
+
+    //TODO: ### Update a hotel (empty body -> expect 400)
+    // PUT {{url}}/hotel/1
+    // Content-Type: application/json
+    // Accept: application/json
+    @Test
+    public void updateHotelEmptyBody_return400(){
+        given()
+                .contentType("application/json")
+                .accept("application/json")
+                .body("")
+        .when()
+                .put("/hotel/{id}", 1)
+        .then()
+                .statusCode(400);
+    }
+
+
+    //TODO: ### Delete a hotel
+    // DELETE {{url}}/hotel/1
+    // Accept: application/json
+    @Test
+    public void testDeleteHotel_valid(){
+        // Fetch a hotel id to delete from hotel 1
+        Integer hotelId =
+                given()
+                        .when()
+                        .get("/hotel/{id}", 1)
+                        .then()
+                        .statusCode(200)
+                        .extract().path("id");
+
+        // Delete that hotel
+        given()
                 .when()
-                .post("/hotel/{id}/rooms", createdHotelId)
+                .delete("/hotel/{hotelId}", hotelId)
                 .then()
-                .statusCode(anyOf(is(201), is(200)))
-                .extract().response();
+                .statusCode(anyOf(is(200), is(204)));
 
-        try { createdRoomId = res.path("id"); } catch (Exception ignored) {}
+        // Verify count decreased by 1 (initial 3 -> now 2)
+        given()
+                .when()
+                .get("/hotel")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(4))
+                .body("id", not(hasItem(hotelId)));
     }
 
-    @Test @Order(5)
-    @DisplayName("List rooms: GET /hotel/{id}/rooms -> 200 & non-empty")
-    void listRoomsForHotel() {
-        Assumptions.assumeTrue(createdHotelId != null, "No hotel id from create step");
-        given().accept(ContentType.JSON)
-                .when().get("/hotel/{id}/rooms", createdHotelId)
-                .then().statusCode(200)
-                .body("size()", greaterThanOrEqualTo(1));
-    }
 
-    @Test @Order(6)
-    @DisplayName("Update hotel: PUT /hotel/{id} -> 200 and fields updated")
-    void updateHotel() {
-        Assumptions.assumeTrue(createdHotelId != null, "No hotel id from create step");
-        String body = "{" +
-                "\"name\":\"Test Hotel Updated\"," +
-                "\"address\":\"New Address 42\"" +
-                "}";
-        given().contentType(ContentType.JSON).accept(ContentType.JSON).body(body)
-                .when().put("/hotel/{id}", createdHotelId)
-                .then().statusCode(200)
-                .body("id", equalTo(createdHotelId))
-                .body("name", equalTo("Test Hotel Updated"))
-                .body("address", equalTo("New Address 42"));
-    }
 
-    @Test @Order(7)
-    @DisplayName("Delete hotel: DELETE /hotel/{id} -> 204/200")
-    void deleteHotel() {
-        Assumptions.assumeTrue(createdHotelId != null, "No hotel id from create step");
-        given().accept(ContentType.JSON)
-                .when().delete("/hotel/{id}", createdHotelId)
-                .then().statusCode(anyOf(is(204), is(200)));
-    }
 
-    @Test @Order(8)
-    @DisplayName("After delete: GET /hotel/{id} -> 404")
-    void getAfterDeleteShould404() {
-        Assumptions.assumeTrue(createdHotelId != null, "No hotel id from create step");
-        given().accept(ContentType.JSON)
-                .when().get("/hotel/{id}", createdHotelId)
-                .then().statusCode(404);
-    }
+
 }

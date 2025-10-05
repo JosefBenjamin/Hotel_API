@@ -9,14 +9,10 @@ import java.util.List;
 
 public class RoomPopulator {
 
-    /**
-     * Create and persist a couple of rooms for each provided hotel using the DAO's addRoom method.
-     * Returns the list of all created Room objects.
-     *
-     * Expected usage from Main:
-     *   List<Hotel> hotels = HotelPopulator.populateCourses(dao);
-     *   List<Room> rooms = RoomPopulator.populate(dao, hotels);
-     */
+
+     // TODO: Create and persist a couple of rooms for each provided hotel using the DAO's addRoom method
+    //  TODO: Returns the list of all created Room objects.
+
     public static List<Room> populateRooms(IDAO dao, List<Hotel> hotels) {
         List<Room> created = new ArrayList<>();
         if (hotels == null || hotels.isEmpty()) return created;

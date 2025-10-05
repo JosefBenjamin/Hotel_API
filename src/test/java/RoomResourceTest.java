@@ -1,87 +1,167 @@
-
 import app.config.ApplicationConfig;
 import app.config.HibernateConfig;
 import app.dao.HotelDAO;
 import app.dao.IDAO;
+import app.entities.Hotel;
+import app.entities.Room;
 import app.populators.HotelPopulator;
 import app.populators.RoomPopulator;
 import io.javalin.Javalin;
 import io.restassured.RestAssured;
-import io.restassured.http.ContentType;
-import io.restassured.response.Response;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import org.junit.jupiter.api.*;
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Socket;
+
+
+import java.util.List;
+
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS) // allow @BeforeAll non-static and instance fields
+//TODO: Default for jUnit is PER_METHOD.
+// Meaning JUnit makes an instance of this class is created for each @Test that is run
 public class RoomResourceTest {
 
     //TODO: Dependencies
     private static Javalin app; // only non-null if we start the server here
-    private static final String BASE_URL = "http://localhost:7070/api/v1";
-    private static EntityManagerFactory emf = HibernateConfig.getEntityManagerFactoryForTest();
-    private static IDAO dao = HotelDAO.getInstance(emf);
-    private HotelPopulator hotelPopulator = new HotelPopulator();
-    private RoomPopulator roomPopulator = new RoomPopulator();
-
-
-    private boolean isPortOpen(String host, int port) {
-        try (Socket s = new Socket()) {
-            s.connect(new InetSocketAddress(host, port), 300);
-            return true;
-        } catch (IOException e) {
-            return false;
-        }
-    }
+    private  static EntityManagerFactory emf;
+    private static IDAO dao;
 
     @BeforeAll
-    void init()  {
-        RestAssured.baseURI = BASE_URL;
-        RestAssured.enableLoggingOfRequestAndResponseIfValidationFails(); // auto-log failures
-        HibernateConfig.setTest(true); // Use Testcontainers DB + create-drop
+    static void init()  {
+        // 1) Lock test mode BEFORE starting server or creating EMF
+        HibernateConfig.setTest(true);
 
-        // If port 7070 isn't listening, start Javalin (same as your Main)
-        if (!isPortOpen("localhost", 7070)) {
-            app = ApplicationConfig.startServer(7070);
-        }
-        Assertions.assertTrue(isPortOpen("localhost", 7070),
-                "Server is not listening on http://localhost:7070");
+        // 2) Start server (this should read the same test config)
+        app = ApplicationConfig.startServer(7070);
+
+        // 3) Point test EMF/DAO at the same test DB
+        emf = HibernateConfig.getEntityManagerFactoryForTest();
+        dao = HotelDAO.getInstance(emf);
+
+        // 4) Rest Assured base URL/URI
+        RestAssured.baseURI = "http://localhost:7070";
+        RestAssured.basePath = "/api/v1";
+        RestAssured.enableLoggingOfRequestAndResponseIfValidationFails(); // auto-log failures
     }
 
     @BeforeEach
     void setUp(){
-        hotelPopulator
+        try(EntityManager em = emf.createEntityManager()) {
+            em.getTransaction().begin();
+            /* TODO: Deletes all rows from both tables.
+                Resets their primary key sequences back to 1.
+                 Cascades the operation to any dependent tables
+             */
+            em.createNativeQuery("TRUNCATE TABLE room, hotel " +
+                    "RESTART IDENTITY CASCADE").executeUpdate();
+            em.getTransaction().commit();
+        }
 
-    }
 
-    @AfterEach
-    void tearDown() {
-            // Delete all data from database
-            try (EntityManager em = emf.createEntityManager()) {
-                em.getTransaction().begin();
-                em.createQuery("DELETE FROM Hotel").executeUpdate();
-                em.createQuery("DELETE FROM Room").executeUpdate();
-                em.createNativeQuery("ALTER SEQUENCE hotel_id_seq RESTART WITH 1").executeUpdate();
-                em.createNativeQuery("ALTER SEQUENCE room_id_seq RESTART WITH 1").executeUpdate();
-                em.getTransaction().commit();
-            }
-            catch (Exception e) {
-                e.printStackTrace();
-            }
+        // TODO: Seed Hotels and Rooms
+        List<Hotel> hotels = HotelPopulator.populateHotels(dao);
+        List<Room> rooms = RoomPopulator.populateRooms(dao, hotels);
+
+
+
 
     }
 
     @AfterAll
-    void closeDown() {
+    static void closeDown() {
         if (app != null) {
             ApplicationConfig.stopServer(app);
         }
     }
 
+
+
+
+    @Test
+    void testGetRoomsForHotel_valid() {
+        // Hotel with DB id=2 should exist from seed and have 3 rooms
+        given()
+                .pathParams("id", 2)
+        .when()
+            .get("/hotel/{id}/rooms")
+        .then()
+            .statusCode(200)
+            .body("size()", equalTo(3))
+            .body("number", hasItems(201, 202)); // room numbers for floor 2
+    }
+
+    @Test
+    void testGetRoomsForHotel_notFound() {
+        given()
+                .pathParams("id", 666999)
+        .when()
+            .get("/hotel/{id}/rooms")
+        .then()
+            .statusCode(404);
+    }
+
+    @Test
+    void testAddRoomToHotel_valid() {
+        // Add a new room to hotel id=1
+        given()
+            .contentType("application/json")
+            .accept("application/json")
+            .body("{\"number\": 21,\n  \"price\": 100}")
+        .when()
+            .post("/hotel/{id}/rooms", 1)
+        .then()
+            .statusCode(anyOf(is(200), is(201)));
+
+        // Verify count increased and the new number exists
+        given()
+        .when()
+            .get("/hotel/{id}/rooms", 1)
+        .then()
+            .statusCode(200)
+            .body("size()", equalTo(4))
+            .body("number", hasItem(21));
+    }
+
+    @Test
+    void testAddRoomToHotel_emptyBody_returns400() {
+        given()
+            .contentType("application/json")
+            .accept("application/json")
+            .body("")
+        .when()
+            .post("/hotel/{id}/rooms", 1)
+        .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void testDeleteRoomById() {
+        // Fetch a room id to delete from hotel 1
+        Integer roomId =
+            given()
+            .when()
+                .get("/hotel/{id}/rooms", 1)
+            .then()
+                .statusCode(200)
+                .extract()
+                .path("[0].id");
+
+        // Delete that room
+        given()
+        .when()
+            .delete("/room/{roomId}", roomId)
+        .then()
+            .statusCode(anyOf(is(200), is(204)));
+
+        // Verify count decreased by 1 (initial 3 -> now 2)
+        given()
+        .when()
+            .get("/hotel/{id}/rooms", 1)
+        .then()
+            .statusCode(200)
+            .body("size()", equalTo(2))
+            .body("id", not(hasItem(roomId)));
+    }
 
 }

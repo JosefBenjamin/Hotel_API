@@ -13,6 +13,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -116,6 +118,47 @@ class HotelDAOTest {
         assertNotNull(hotel);
         assertEquals(hotel.getName(), createdHotel.getName());
         assertNotNull(createdHotel.getRooms());
+    }
+
+    @Test
+    void createHotels() {
+        //TODO: Arrange
+
+        Hotel hotel1 = Hotel.builder()
+                .hotelId(999)
+                .name("Grand Budapest Hotel")
+                .address("Somewhere in Budapest")
+                .rooms(10)
+                .build();
+
+        Hotel hotel2 = Hotel.builder()
+                .hotelId(989)
+                .name("The Underworld")
+                .address("Somewhere in Hell")
+                .rooms(20)
+                .build();
+
+        Hotel hotel3 = Hotel.builder()
+                .hotelId(799)
+                .name("Atlantis The Plam")
+                .address("Somewhere in Dubai")
+                .rooms(30)
+                .build();
+
+
+        //TODO: Act
+        List<Hotel> createdHotels = new ArrayList<>();
+        createdHotels.add(hotel1);
+        createdHotels.add(hotel2);
+        createdHotels.add(hotel3);
+
+        List<Hotel> persistedHotels = dao.createHotels(createdHotels);
+
+
+        //TODO: Assert
+        assertNotNull(persistedHotels);
+        assertEquals(persistedHotels.size(), createdHotels.size());
+        assertEquals(persistedHotels.get(0).getName(), createdHotels.get(0).getName());
     }
 
 

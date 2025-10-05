@@ -5,6 +5,9 @@ import app.dto.RoomDTO;
 import app.entities.Hotel;
 import app.entities.Room;
 
+import java.util.Arrays;
+import java.util.List;
+
 
 public class EntityConverter {
 
@@ -14,7 +17,7 @@ public class EntityConverter {
             return null;
         }
         Hotel h = new Hotel();
-        h.setId(hotelDTO.id());
+        if (hotelDTO.id() != null) h.setId(hotelDTO.id());
         h.setName(hotelDTO.name());
         h.setAddress(hotelDTO.address());
         if (hotelDTO.rooms() != null) {
@@ -31,7 +34,7 @@ public class EntityConverter {
             return null;
         }
         Room r = new Room();
-        r.setId(roomDTO.id());
+        if (roomDTO.id()  != null) r.setId(roomDTO.id());
         r.setRoomNumber(roomDTO.number());
         r.setPrice(roomDTO.price());
         if (roomDTO.hotelId() != null) {
@@ -40,6 +43,20 @@ public class EntityConverter {
             r.setHotel(h); // attach by id; service layer can load/verify
         }
         return r;
+    }
+
+    public List<Hotel> fromHotelList(HotelDTO[] hotelDTOS) {
+        List<Hotel> hotels = Arrays.stream(hotelDTOS)
+                .map((h) -> fromHotel(h)).toList();
+
+        return hotels;
+    }
+
+    public List<Room> fromRoomList(RoomDTO[] roomDTOS) {
+        List<Room> rooms = Arrays.stream(roomDTOS)
+                .map((r) -> fromRoom(r)).toList();
+
+        return rooms;
     }
 
 }

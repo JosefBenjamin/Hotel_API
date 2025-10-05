@@ -64,6 +64,26 @@ public class HotelDAO implements IDAO {
             }
         }
 
+    @Override
+    public List<Hotel> createHotels(List<Hotel> hotels) {
+        if (hotels == null || hotels.isEmpty()) {
+            throw new ApiException(400, "No hotels to create");
+        }
+        try (EntityManager em = emf.createEntityManager()) {
+            em.getTransaction().begin();
+            try {
+                for (Hotel h : hotels) {
+                    em.persist(h);
+                }
+                em.getTransaction().commit();
+                return hotels; // IDs populated after commit
+            } catch (RuntimeException e) {
+                if (em.getTransaction().isActive()) em.getTransaction().rollback();
+                throw new ApiException(500, "Failed to create hotels: " + e.getMessage());
+            }
+        }
+    }
+
         @Override
         public Hotel updateHotel (Hotel hotel){
             try (EntityManager em = emf.createEntityManager()) {
