@@ -3,6 +3,7 @@ package app.exceptions;
 public class ApiException extends RuntimeException {
     private int code;
 
+    //TODO:
     public ApiException(int code, String msg){
         super(msg);
         this.code = code;

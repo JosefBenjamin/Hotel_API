@@ -21,8 +21,8 @@ public class Main {
 
 
         //TODO: Populate DB with initial data
-        List<Hotel> hotels = HotelPopulator.populateHotels(dao);
-        RoomPopulator.populateRooms(dao, hotels);
+        // List<Hotel> hotels = HotelPopulator.populateHotels(dao);
+       //  RoomPopulator.populateRooms(dao, hotels);
 
         ApplicationConfig.startServer(7070);
 

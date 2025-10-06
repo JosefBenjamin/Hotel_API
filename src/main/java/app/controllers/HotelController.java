@@ -7,6 +7,7 @@ import app.dao.HotelDAO;
 import app.dao.IDAO;
 import app.dto.HotelDTO;
 import app.entities.Hotel;
+import app.exceptions.ApiException;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 import jakarta.persistence.EntityManagerFactory;
@@ -68,7 +69,11 @@ public class HotelController implements IHotelController {
             ctx.status(HttpStatus.CREATED);
             ctx.json(out);
             logger.info("Created hotel id={} name={}", created.getId(), created.getName());
-        } catch (Exception e) {
+        } catch(ApiException e) {
+            ctx.status(e.getCode());
+            ctx.result(e.getMessage());
+        }
+        catch (Exception  e) {
             debugLogger.error("Failed to create hotel", e);
             ctx.status(HttpStatus.BAD_REQUEST);
             ctx.result("Could not create hotel");

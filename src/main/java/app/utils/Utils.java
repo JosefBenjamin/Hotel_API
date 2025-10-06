@@ -1,11 +1,17 @@
 package app.utils;
 
 
-
 import app.exceptions.ApiException;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import io.javalin.http.Context;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 
 public class Utils {
@@ -25,4 +31,25 @@ public class Utils {
             throw new ApiException(500, String.format("Could not read property %s.", propName));
         }
     }
+
+    public ObjectMapper getObjectMapper() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false); // Ignore unknown properties in JSON
+        objectMapper.registerModule(new JavaTimeModule()); // Serialize and deserialize java.time objects
+        objectMapper.writer(new DefaultPrettyPrinter());
+        return objectMapper;
+    }
+
+    public static String convertToJsonMessage(Context ctx, String property, String message) {
+        Map<String, String> msgMap = new HashMap<>();
+        msgMap.put(property, message);  // Put the message in the map
+        msgMap.put("status", String.valueOf(ctx.status()));  // Put the status in the map
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            return objectMapper.writeValueAsString(msgMap);  // Convert the map to JSON
+        } catch (Exception e) {
+            return "{\"error\": \"Could not convert  message to JSON\"}";
+        }
+    }
+
 }

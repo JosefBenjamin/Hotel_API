@@ -4,7 +4,7 @@
 ### Hotel API Endpoints
 
 ### List all hotels
-GET {{url}}/hotel
+GET {{url}}/hotelgit
 Accept: application/json
 
 ### Get a hotel by id
